@@ -985,6 +985,61 @@ class TestJitRetrievalReadiness:
         codes = [w["code"] for w in result["warnings"]]
         assert "toc-missing-description" in codes
 
+    def test_comment_only_description_value_still_warns(self):
+        """CodeRabbit PR #109: `description: # TODO` matched the old regex
+        (`#` is non-whitespace) but is a YAML comment, not a value -- the
+        field is exactly as absent as if it weren't there at all."""
+        filler = "\n\n".join(f"Paragraph {i} of filler text." for i in range(60))
+        content = (
+            "---\n"
+            "description: # TODO write this\n"
+            "---\n\n"
+            "# Title\n\n"
+            "## Table of Contents\n\n"
+            "1. [A](#a)\n\n"
+            "---\n\n"
+            f"## A\n\n{filler}\n"
+        )
+        result = validate_toc(content, max_heading_level=2)
+        codes = [w["code"] for w in result["warnings"]]
+        assert "toc-missing-description" in codes
+
+    def test_empty_quoted_description_value_still_warns(self):
+        """CodeRabbit PR #109: `description: ""` matched the old regex (the
+        opening quote is non-whitespace) but carries no actual text."""
+        filler = "\n\n".join(f"Paragraph {i} of filler text." for i in range(60))
+        content = (
+            "---\n"
+            'description: ""\n'
+            "---\n\n"
+            "# Title\n\n"
+            "## Table of Contents\n\n"
+            "1. [A](#a)\n\n"
+            "---\n\n"
+            f"## A\n\n{filler}\n"
+        )
+        result = validate_toc(content, max_heading_level=2)
+        codes = [w["code"] for w in result["warnings"]]
+        assert "toc-missing-description" in codes
+
+    def test_real_description_after_regex_tightening_still_suppresses_warning(self):
+        """Confirms the stricter check didn't overcorrect into rejecting a
+        genuinely populated, quoted description."""
+        filler = "\n\n".join(f"Paragraph {i} of filler text." for i in range(60))
+        content = (
+            "---\n"
+            'description: "A real, non-empty description."\n'
+            "---\n\n"
+            "# Title\n\n"
+            "## Table of Contents\n\n"
+            "1. [A](#a)\n\n"
+            "---\n\n"
+            f"## A\n\n{filler}\n"
+        )
+        result = validate_toc(content, max_heading_level=2)
+        codes = [w["code"] for w in result["warnings"]]
+        assert "toc-missing-description" not in codes
+
     def test_jit_readiness_warnings_are_never_errors(self):
         # All four signals are additive warnings; they must never appear
         # in `errors`, regardless of how badly a document scores. (This
