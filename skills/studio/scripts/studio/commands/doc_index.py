@@ -6,11 +6,14 @@ Thin CLI wrapper around ``studio.utils.doc_index``.
 """
 
 import argparse
+import logging
 from pathlib import Path
 from typing import List
 
 from ..utils.doc_index import get_or_build_doc_index
 from ..utils.ui import ui
+
+logger = logging.getLogger(__name__)
 
 
 def cmd_doc_index(argv: List[str]) -> int:
@@ -19,7 +22,10 @@ def cmd_doc_index(argv: List[str]) -> int:
         prog="cfs doc-index",
         description=(
             "Build or reuse a cached heading/section index for a Markdown file, "
-            "so navigation reads the file's structure once, not once per query."
+            "so navigation reads the file's structure once, not once per query. "
+            "section_level is inferred from the most frequently repeated heading "
+            "level (ties prefer the shallower level); a level used only once is "
+            "never chosen."
         ),
     )
     p.add_argument("file", help="Markdown file path")
@@ -38,7 +44,15 @@ def cmd_doc_index(argv: List[str]) -> int:
         )
         return 2
 
-    index = get_or_build_doc_index(filepath, force_rebuild=args.rebuild)
+    try:
+        index = get_or_build_doc_index(filepath, force_rebuild=args.rebuild)
+    except UnicodeDecodeError as exc:
+        logger.warning("doc-index: %s is not valid UTF-8 text: %s", filepath, exc)
+        ui.result(
+            {"file": str(filepath), "status": "ERROR", "message": f"Not valid UTF-8 text: {exc}"},
+            human_fn=lambda d: ui.error(f"{d['file']}: {d['message']}"),
+        )
+        return 2
 
     output = {
         "file": str(filepath),
